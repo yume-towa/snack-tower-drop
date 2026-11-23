@@ -121,8 +121,8 @@ h1 span{color:var(--accent);text-shadow:0 0 18px color-mix(in srgb,var(--accent)
   transition:transform .08s,filter .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
 .btn-main b{font:700 26px/1 var(--num);letter-spacing:.12em;padding-left:.12em}
 .btn-main small{font-size:11px;font-weight:700;opacity:.75;letter-spacing:.06em}
-.btn-main:active:not(:disabled){transform:scale(.95)}
-.btn-main:disabled{filter:grayscale(.85) brightness(.55);cursor:default}
+.btn-main:active:not(:disabled):not(.locked){transform:scale(.95)}
+.btn-main:disabled,.btn-main.locked{filter:grayscale(.85) brightness(.55);cursor:default}
 .btn-main.stop{background:radial-gradient(circle at 50% 30%,#fff,#f1f3f8 55%,#c9cdd8);color:var(--ink);
   box-shadow:0 0 0 6px rgba(255,255,255,.06),0 0 0 7px #fff,0 14px 34px -6px rgba(255,255,255,.45),inset 0 -6px 14px rgba(0,0,0,.12)}
 .btn-main.stop::after{content:"";position:absolute;inset:-7px;border-radius:50%;border:2px solid #fff;animation:ripple 1s ease-out infinite;pointer-events:none}
@@ -1170,7 +1170,10 @@ function flushPops(){popTimer=0;if(!popBuf.length)return;
   if(popBuf.length===1)popup(popBuf[0].s+' GET!',popBuf[0].c);else popup(popBuf.length+'個 GET!!','#ffd23f');popBuf=[];sfx.get()}
 function popup(text,color){const d=document.createElement('div');d.className='pop';d.style.background=color||'#ffd23f';d.style.color=textOn(color||'#ffd23f');d.textContent=text;$('pops').appendChild(d);setTimeout(()=>d.remove(),1900)}
 let btnPressT=0,spinStart=0;const TIME_LIMIT=10,timerEl=$('timer');let lastRem=-1;
+// 時間切れ直後の入力ロック：ギリギリで押した STOP が次の START（100円）にならないようにする
+const INPUT_LOCK_MS=600;let lockUntil=0;
 function press(){
+  if(performance.now()<lockUntil)return;
   ac();btnPressT=0.15;
   if(state==='idle'){save.spent+=100;boardSpent+=100;persist();updateStats();drawLED(boardSpent/100);
     state='spin';lamp=Math.random()*NL|0;acc=0;spinT=0;spinStart=performance.now();stopLamp=-1;lastRem=-1;timerEl.classList.add('show');
@@ -1257,7 +1260,7 @@ function physicsStep(){const _t=performance.now();
 function loop(now){
   const rawDt=Math.min(0.5,Math.max(0,(now-last)/1000)),dt=Math.min(0.05,rawDt);last=now;
   if(state==='spin'){acc+=rawDt*1000;spinT=(now-spinStart)/1000;while(acc>=stepMs){acc-=stepMs;lamp=(lamp+1)%NL;sfx.tick()}const rem=Math.max(0,Math.ceil(TIME_LIMIT-spinT));timerEl.style.setProperty('--p',Math.max(0,1-spinT/TIME_LIMIT).toFixed(3));if(rem!==lastRem){lastRem=rem;timerEl.textContent=rem;timerEl.classList.toggle('hot',rem<=3);drawLED(rem,'TIME',rem<=3);if(rem<=3&&rem>0)tone(880,0.08,'square',0.04)}
-    if(spinT>=TIME_LIMIT){stopRoulette();msg('時間切れ！ '+msgEl.textContent,true)}}
+    if(spinT>=TIME_LIMIT){lockUntil=performance.now()+INPUT_LOCK_MS;stopRoulette();msg('時間切れ！ '+msgEl.textContent,true)}}
   else attract+=dt;
   physAcc+=dt;let n=0;while(physAcc>=DT&&n<3){physicsStep();physAcc-=DT;n++}if(n>=3)physAcc=0;
   if(state==='act'&&settleT>=0){settleT+=dt;
@@ -1278,6 +1281,7 @@ function loop(now){
   {const c=camera.position;roofTop.visible=!(c.y>ROOF_Y-0.3&&Math.abs(c.x)<OW+0.5&&c.z<OD+0.9)}
   btnCap.position.y+=((btnPressT>0?0.055:0.09)-btnCap.position.y)*0.5;btnTop.position.y=btnCap.position.y+0.046;if(btnPressT>0)btnPressT-=dt;
   btnCapMat.emissiveIntensity=state==='spin'?0.6+0.5*Math.sin(now/90):0.3;
+  btn.classList.toggle('locked',now<lockUntil);
   controls.update();syncMeshes();updateHint();renderer.render(scene,camera);requestAnimationFrame(loop);
 }
 switchSet(setId);state='idle';setBtn();updateStats();$('loading').remove();
